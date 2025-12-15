@@ -1,0 +1,180 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: travel-agent-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-travelagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-travelagent_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - travel-agent-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-travelagent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache (optional, for future use)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: travel-agent-redis
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - travel-agent-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-agent-gateway
+    command: python -m uvicorn api-gateway.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=${DATABASE_URL:-postgresql://travelagent:password@postgres:5432/travelagent_db}
+      - POSTGRES_USER=${POSTGRES_USER:-travelagent}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-travelagent_db}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-openai/gpt-4}
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - CHAT_SERVICE_URL=http://chat-service:8001
+      - FLIGHT_SERVICE_URL=http://flight-service:8002
+      - HOTEL_SERVICE_URL=http://hotel-service:8003
+      - WEATHER_SERVICE_URL=http://weather-service:8004
+      - USER_SERVICE_URL=http://user-service:8005
+    volumes:
+      - .:/app/backend
+    networks:
+      - travel-agent-network
+    depends_on:
+      - chat-service
+      - flight-service
+      - hotel-service
+      - weather-service
+      - user-service
+    restart: unless-stopped
+
+  # Chat Service
+  chat-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-agent-chat
+    command: python -m uvicorn services.chat-service.main:app --host 0.0.0.0 --port 8001 --reload
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=development
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-openai/gpt-4}
+      - FLIGHT_SERVICE_URL=http://flight-service:8002
+      - HOTEL_SERVICE_URL=http://hotel-service:8003
+      - WEATHER_SERVICE_URL=http://weather-service:8004
+    volumes:
+      - .:/app/backend
+    networks:
+      - travel-agent-network
+    restart: unless-stopped
+
+  # Flight Service
+  flight-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-agent-flight
+    command: python -m uvicorn services.flight-service.main:app --host 0.0.0.0 --port 8002 --reload
+    ports:
+      - "8002:8002"
+    environment:
+      - ENVIRONMENT=development
+      - AMADEUS_API_KEY=${AMADEUS_API_KEY}
+      - AMADEUS_API_SECRET=${AMADEUS_API_SECRET}
+    volumes:
+      - .:/app/backend
+    networks:
+      - travel-agent-network
+    restart: unless-stopped
+
+  # Hotel Service
+  hotel-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-agent-hotel
+    command: python -m uvicorn services.hotel-service.main:app --host 0.0.0.0 --port 8003 --reload
+    ports:
+      - "8003:8003"
+    environment:
+      - ENVIRONMENT=development
+      - AMADEUS_API_KEY=${AMADEUS_API_KEY}
+      - AMADEUS_API_SECRET=${AMADEUS_API_SECRET}
+    volumes:
+      - .:/app/backend
+    networks:
+      - travel-agent-network
+    restart: unless-stopped
+
+  # Weather Service
+  weather-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-agent-weather
+    command: python -m uvicorn services.weather-service.main:app --host 0.0.0.0 --port 8004 --reload
+    ports:
+      - "8004:8004"
+    environment:
+      - ENVIRONMENT=development
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
+    volumes:
+      - .:/app/backend
+    networks:
+      - travel-agent-network
+    restart: unless-stopped
+
+  # User Service
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-agent-user
+    command: python -m uvicorn services.user-service.main:app --host 0.0.0.0 --port 8005 --reload
+    ports:
+      - "8005:8005"
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=${DATABASE_URL:-postgresql://travelagent:password@postgres:5432/travelagent_db}
+      - POSTGRES_USER=${POSTGRES_USER:-travelagent}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-travelagent_db}
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+    volumes:
+      - .:/app/backend
+    networks:
+      - travel-agent-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+networks:
+  travel-agent-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

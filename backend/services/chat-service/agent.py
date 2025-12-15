@@ -20,10 +20,12 @@ class TravelAgent:
     """LangChain-powered travel agent"""
 
     def __init__(self):
+        # Use OpenRouter instead of OpenAI
         self.llm = ChatOpenAI(
-            model=settings.openai_model,
+            model=settings.openai_model,  # e.g., "openai/gpt-4" or "anthropic/claude-3-opus"
             temperature=0.7,
-            openai_api_key=settings.openai_api_key,
+            openai_api_key=settings.openai_api_key,  # OpenRouter API key
+            openai_api_base="https://openrouter.ai/api/v1",  # OpenRouter base URL
         )
         self.tools = self._create_tools()
         self.agent = self._create_agent()
