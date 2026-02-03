@@ -26,6 +26,12 @@ from backend.shared.utils import (
     get_user_from_token,
     setup_logger,
 )
+
+# Add service directory to path for local imports
+service_dir = os.path.dirname(os.path.abspath(__file__))
+if service_dir not in sys.path:
+    sys.path.insert(0, service_dir)
+
 from routes import router as user_router
 from datetime import datetime
 

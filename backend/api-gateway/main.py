@@ -192,10 +192,22 @@ async def proxy_request(service: str, path: str, request: Request):
             )
 
             # Return the response
+            try:
+                resp_content = response.json() if response.text else None
+            except Exception:
+                resp_content = {"detail": response.text or "Unknown error from service"}
+
+            # Filter out hop-by-hop headers that conflict with JSONResponse
+            excluded_headers = {"content-length", "content-encoding", "transfer-encoding"}
+            resp_headers = {
+                k: v for k, v in response.headers.items()
+                if k.lower() not in excluded_headers
+            }
+
             return JSONResponse(
                 status_code=response.status_code,
-                content=response.json() if response.text else None,
-                headers=dict(response.headers),
+                content=resp_content,
+                headers=resp_headers,
             )
 
     except httpx.TimeoutException:

@@ -46,7 +46,7 @@ services:
       - "8000:8000"
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=${DATABASE_URL:-postgresql://travelagent:password@postgres:5432/travelagent_db}
+      - DATABASE_URL=postgresql://travelagent:password@postgres:5432/travelagent_db
       - POSTGRES_USER=${POSTGRES_USER:-travelagent}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-travelagent_db}
@@ -81,6 +81,10 @@ services:
       - "8001:8001"
     environment:
       - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://travelagent:password@postgres:5432/travelagent_db
+      - POSTGRES_USER=travelagent
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=travelagent_db
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL:-openai/gpt-4}
       - FLIGHT_SERVICE_URL=http://flight-service:8002
@@ -90,6 +94,8 @@ services:
       - .:/app/backend
     networks:
       - travel-agent-network
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   # Flight Service
@@ -159,7 +165,7 @@ services:
       - "8005:8005"
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=${DATABASE_URL:-postgresql://travelagent:password@postgres:5432/travelagent_db}
+      - DATABASE_URL=postgresql://travelagent:password@postgres:5432/travelagent_db
       - POSTGRES_USER=${POSTGRES_USER:-travelagent}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-travelagent_db}

@@ -10,6 +10,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from backend.shared.config import get_settings, get_db
 from backend.shared.models import HealthCheckResponse, ServiceStatus
 from backend.shared.utils import setup_logger
+
+# Add service directory to path for local imports
+service_dir = os.path.dirname(os.path.abspath(__file__))
+if service_dir not in sys.path:
+    sys.path.insert(0, service_dir)
+
 from routes import router as chat_router
 
 settings = get_settings()

@@ -122,7 +122,7 @@ async def get_conversation_history(conversation_id: str, db: Session = Depends(g
                 "role": msg.role,
                 "content": msg.content,
                 "timestamp": msg.created_at,
-                "metadata": msg.metadata,
+                "metadata": msg.message_metadata,
             }
             for msg in messages
         ],
