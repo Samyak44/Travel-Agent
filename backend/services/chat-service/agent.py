@@ -102,17 +102,17 @@ class TravelAgent:
         return [
             Tool(
                 name="search_flights",
-                func=search_flights,
+                coroutine=search_flights,
                 description="Search for flights based on user requirements. Use this when the user wants to find flights, book tickets, or compare flight prices.",
             ),
             Tool(
                 name="search_hotels",
-                func=search_hotels,
+                coroutine=search_hotels,
                 description="Search for hotels based on user requirements. Use this when the user wants to find accommodation, book hotels, or compare hotel prices.",
             ),
             Tool(
                 name="get_weather",
-                func=get_weather,
+                coroutine=get_weather,
                 description="Get weather information for a travel destination. Use this when the user asks about weather conditions, climate, or what to pack.",
             ),
         ]
