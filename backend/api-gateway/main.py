@@ -1,19 +1,37 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 import httpx
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from backend.shared.config import get_settings
-from backend.shared.models import HealthCheckResponse, ServiceStatus
-from backend.shared.utils import setup_logger
+from backend.shared.config import get_settings, get_db
+from backend.shared.models import (
+    HealthCheckResponse,
+    ServiceStatus,
+    UserCreate,
+    UserResponse,
+    Token,
+)
+from backend.shared.utils import (
+    setup_logger,
+    hash_password,
+    verify_password,
+    create_access_token,
+    get_user_from_token,
+)
+from backend.database.models import User, Base
+from backend.shared.config.database import engine
 
 settings = get_settings()
 logger = setup_logger("api-gateway")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
 
 app = FastAPI(
     title="Travel Agent API Gateway",
@@ -22,6 +40,26 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Create database tables on startup with retry logic"""
+    import time
+    max_retries = 10
+    for i in range(max_retries):
+        try:
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables created successfully.")
+            break
+        except Exception as e:
+            if i < max_retries - 1:
+                logger.warning(f"Database not ready, retrying in 2s... ({i+1}/{max_retries})")
+                time.sleep(2)
+            else:
+                logger.error(f"Failed to create database tables: {e}")
+                raise
+
 
 # CORS middleware
 app.add_middleware(
@@ -97,6 +135,99 @@ async def check_all_services():
     }
 
 
+# ==================== Auth Endpoints ====================
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> User:
+    """Get current authenticated user"""
+    user_data = get_user_from_token(token)
+
+    if user_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(User).filter(User.id == user_data["user_id"]).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    return user
+
+
+@app.post("/api/users/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED, tags=["auth"])
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user"""
+    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
+
+    new_user = User(
+        email=user_data.email,
+        hashed_password=hash_password(user_data.password),
+        full_name=user_data.full_name,
+        phone=user_data.phone,
+        role=user_data.role.value,
+        is_active=user_data.is_active,
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+
+
+@app.post("/api/users/login", response_model=Token, tags=["auth"])
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
+    """Login and get access token"""
+    user = db.query(User).filter(User.email == form_data.username).first()
+
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user account",
+        )
+
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token = create_access_token(
+        data={
+            "user_id": user.id,
+            "email": user.email,
+            "role": user.role,
+        },
+        expires_delta=access_token_expires,
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/api/users/me", response_model=UserResponse, tags=["auth"])
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current user information"""
+    return current_user
+
+
+# ==================== Proxy Middleware ====================
+
 # Proxy middleware for routing requests to services
 @app.api_route(
     "/api/users/{path:path}",
@@ -105,6 +236,16 @@ async def check_all_services():
 )
 async def proxy_users(path: str, request: Request):
     """Proxy requests to User Service"""
+    return await proxy_request("users", path, request)
+
+
+@app.api_route(
+    "/users/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    tags=["users"],
+)
+async def proxy_users_no_prefix(path: str, request: Request):
+    """Proxy requests to User Service (without /api prefix)"""
     return await proxy_request("users", path, request)
 
 

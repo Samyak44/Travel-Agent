@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: travel-agent-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-travelagent}
@@ -41,7 +39,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: travel-agent-gateway
-    command: python -m uvicorn api-gateway.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend
+    working_dir: /app/backend/api-gateway
     ports:
       - "8000:8000"
     environment:
@@ -58,16 +57,14 @@ services:
       - HOTEL_SERVICE_URL=http://hotel-service:8003
       - WEATHER_SERVICE_URL=http://weather-service:8004
       - USER_SERVICE_URL=http://user-service:8005
+      - PYTHONPATH=/app
     volumes:
       - .:/app/backend
     networks:
       - travel-agent-network
     depends_on:
-      - chat-service
-      - flight-service
-      - hotel-service
-      - weather-service
-      - user-service
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   # Chat Service
@@ -76,7 +73,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: travel-agent-chat
-    command: python -m uvicorn services.chat-service.main:app --host 0.0.0.0 --port 8001 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/backend
+    working_dir: /app/backend/services/chat-service
     ports:
       - "8001:8001"
     environment:
@@ -90,12 +88,14 @@ services:
       - FLIGHT_SERVICE_URL=http://flight-service:8002
       - HOTEL_SERVICE_URL=http://hotel-service:8003
       - WEATHER_SERVICE_URL=http://weather-service:8004
+      - PYTHONPATH=/app
     volumes:
       - .:/app/backend
     networks:
       - travel-agent-network
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   # Flight Service
@@ -104,13 +104,15 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: travel-agent-flight
-    command: python -m uvicorn services.flight-service.main:app --host 0.0.0.0 --port 8002 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload --reload-dir /app/backend
+    working_dir: /app/backend/services/flight-service
     ports:
       - "8002:8002"
     environment:
       - ENVIRONMENT=development
       - AMADEUS_API_KEY=${AMADEUS_API_KEY}
       - AMADEUS_API_SECRET=${AMADEUS_API_SECRET}
+      - PYTHONPATH=/app
     volumes:
       - .:/app/backend
     networks:
@@ -123,13 +125,15 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: travel-agent-hotel
-    command: python -m uvicorn services.hotel-service.main:app --host 0.0.0.0 --port 8003 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8003 --reload --reload-dir /app/backend
+    working_dir: /app/backend/services/hotel-service
     ports:
       - "8003:8003"
     environment:
       - ENVIRONMENT=development
       - AMADEUS_API_KEY=${AMADEUS_API_KEY}
       - AMADEUS_API_SECRET=${AMADEUS_API_SECRET}
+      - PYTHONPATH=/app
     volumes:
       - .:/app/backend
     networks:
@@ -142,12 +146,14 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: travel-agent-weather
-    command: python -m uvicorn services.weather-service.main:app --host 0.0.0.0 --port 8004 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8004 --reload --reload-dir /app/backend
+    working_dir: /app/backend/services/weather-service
     ports:
       - "8004:8004"
     environment:
       - ENVIRONMENT=development
       - WEATHER_API_KEY=${WEATHER_API_KEY}
+      - PYTHONPATH=/app
     volumes:
       - .:/app/backend
     networks:
@@ -160,7 +166,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: travel-agent-user
-    command: python -m uvicorn services.user-service.main:app --host 0.0.0.0 --port 8005 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8005 --reload --reload-dir /app/backend
+    working_dir: /app/backend/services/user-service
     ports:
       - "8005:8005"
     environment:
@@ -170,12 +177,14 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-travelagent_db}
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - PYTHONPATH=/app
     volumes:
       - .:/app/backend
     networks:
       - travel-agent-network
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
 networks:
